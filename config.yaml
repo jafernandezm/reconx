@@ -1,0 +1,197 @@
+# ─────────────────────────────────────────────────────────────
+# ReconX — Central Configuration
+# Todos los parámetros viven acá. Nunca hardcodear valores en el código.
+# ─────────────────────────────────────────────────────────────
+
+# ── Binaries ──────────────────────────────────────────────────
+# Si los tools no están en PATH, poné el path absoluto acá
+tools:
+  naabu:       naabu
+  httpx:       httpx
+  subfinder:   subfinder
+  dnsx:        dnsx
+  asnmap:      asnmap
+  gau:         gau
+  waybackurls: waybackurls
+  gowitness:   gowitness
+  nuclei:      nuclei
+  ffuf:        ffuf
+  arjun:       arjun
+  katana:      katana
+
+
+# ── Output ────────────────────────────────────────────────────
+output:
+  base_dir: ./output          # Carpeta raíz de todos los resultados
+  timestamp_format: "%Y%m%d_%H%M%S"
+  log_to_file: true           # Guarda log completo en output/<run>/reconx.log
+
+
+# ── Rate limiting global ───────────────────────────────────────
+# Estos son los límites MÁXIMOS. Cada módulo puede tener los suyos.
+# En redes lentas o targets sensibles, bajar a la mitad.
+rate:
+  max_rps: 150                # Requests per second global
+  delay_between_modules: 1    # Segundos de pausa entre módulos (evita picos)
+
+
+# ══════════════════════════════════════════════════════════════
+# PHASE 1 — RECON
+# ══════════════════════════════════════════════════════════════
+
+dns:
+  resolvers:                  # DNS resolvers públicos rápidos
+    - 1.1.1.1
+    - 8.8.8.8
+    - 9.9.9.9
+  record_types:               # Qué registros buscar
+    - A
+    - AAAA
+    - CNAME
+    - MX
+    - NS
+    - TXT
+  threads: 50
+  timeout: 10                 # segundos por query
+  retries: 2
+
+asn:
+  timeout: 30
+
+subdomains:
+  recursive: true
+  all_sources: true           # Usa todas las fuentes de subfinder
+  threads: 10
+  timeout: 300                # subfinder puede tardar, darle tiempo
+  max_results: 5000           # Cap para no explotar en dominios grandes
+  use_crtsh: true           # Certificate Transparency logs
+  crtsh_timeout: 30
+  use_urlscan: true         # urlscan.io API pública
+  urlscan_timeout: 30
+
+ports:
+  # top-ports 3000 cubre el 99% de lo interesante sin ser full scan
+  # Para scan completo cambiar a: range: "1-65535" y bajar rate
+  mode: top                   # top | range | list
+  top: 3000
+  # range: "1-65535"          # Descomentar para full scan (lento)
+  # list: "80,443,8080,8443"  # Descomentar para ports específicos
+  rate: 3000                  # Paquetes/seg — bajar a 500 en redes lentas
+  concurrency: 50
+  retries: 2
+  timeout: 10
+  exclude_cdn: true           # No scannear IPs de CDN (Cloudflare, Akamai, etc.)
+  scan_all_ips: false         # Si el dominio resuelve múltiples IPs
+
+http_probe:
+  threads: 50
+  timeout: 10
+  follow_redirects: true
+  max_redirects: 5
+  random_agent: true
+  # Qué extraer de cada host
+  extract:
+    - title
+    - status_code
+    - content_length
+    - server
+    - tech
+    - ip
+    - cname
+    - location
+    - tls
+  # Status codes que considerar "vivos"
+  match_codes: [200, 201, 204, 301, 302, 307, 401, 403, 405, 500]
+
+tech:
+  # httpx ya detecta tech — este módulo hace análisis adicional si webanalyze está disponible
+  use_webanalyze: false       # Cambiar a true si tenés webanalyze instalado
+  timeout: 10
+
+urls:
+  # Recolección pasiva — no toca el target directamente
+  threads: 5
+  blacklist_extensions:       # Extensiones a ignorar (ruido)
+    - png
+    - jpg
+    - jpeg
+    - gif
+    - css
+    - woff
+    - woff2
+    - svg
+    - ico
+    - ttf
+    - eot
+    - mp4
+    - webp
+  max_urls_per_domain: 10000  # Cap para evitar dominios con millones de URLs
+  subdomain_sample: 20        # Cuántos subdominios usar para gau (evita sobrecarga)
+  timeout: 180
+
+screenshots:
+  threads: 10
+  timeout: 10                 # Segundos por screenshot
+  resolution: "1280,720"
+  skip_if_no_live_urls: true
+
+
+# ══════════════════════════════════════════════════════════════
+# PHASE 2 — ENUM
+# ══════════════════════════════════════════════════════════════
+
+dirscan:
+  wordlist: /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
+  # Fallback si no hay seclists
+  wordlist_fallback: /usr/share/wordlists/dirb/common.txt
+  threads: 50
+  timeout: 300                # Por URL
+  max_targets: 15             # Cap de URLs a scannear (evita correr horas)
+  match_codes: [200, 201, 204, 301, 302, 307, 401, 403, 405]
+  extensions:                 # Extensiones adicionales a probar
+    - php
+    - asp
+    - aspx
+    - jsp
+    - html
+    - txt
+    - bak
+    - sql
+
+params:
+  threads: 10
+  timeout: 180
+  max_targets: 5              # Arjun es lento — limitar targets
+  stable: true                # Modo conservador (menos falsos positivos)
+
+crawl:
+  depth: 3
+  concurrency: 5              # Browsers headless en paralelo — NO subir de 10
+  js_crawl: true              # Renderiza JS — apagar si el target es HTML estático
+  timeout: 15                 # Segundos por página
+  headless: true
+  max_targets: 10
+  # Excluir dominios de terceros del crawl
+  scope: strict               # strict = solo el dominio base | fuzzy = incluye subdominios
+
+
+# ══════════════════════════════════════════════════════════════
+# PHASE 3 — VULN
+# ══════════════════════════════════════════════════════════════
+
+nuclei:
+  severity:                   # Qué severidades correr
+    - critical
+    - high
+    - medium
+  templates:                  # Grupos de templates a usar
+    - cves
+    - exposures
+    - misconfigurations
+    - vulnerabilities
+    - default-logins
+  rate_limit: 100             # Requests/seg — conservador para no triggear WAF
+  bulk_size: 25
+  concurrency: 10
+  timeout: 900                # 15 minutos — nuclei puede tardar
+  update_templates: true      # Actualizar templates antes de correr

@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────────
+# ReconX — requirements.txt
+# Instalar: pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────────
+
+# Config
+pyyaml>=6.0
+
+# Subdomain permutations
+dnsgen>=1.0.4
+
+# HTTP requests (por si algún módulo lo necesita internamente)
+requests>=2.31.0
+
+# Parsing de URLs y HTML
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+
+
+
+
+
+
